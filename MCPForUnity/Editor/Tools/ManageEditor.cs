@@ -2,7 +2,9 @@ using System;
 using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditorInternal; // Required for tag management
+using UnityEngine.SceneManagement;
 
 namespace MCPForUnity.Editor.Tools
 {
@@ -55,6 +57,9 @@ namespace MCPForUnity.Editor.Tools
                     {
                         if (!EditorApplication.isPlaying)
                         {
+                            // Auto-save dirty scenes to prevent "Save Scene" modal dialog
+                            // that blocks the editor and causes MCP TCP connection timeout.
+                            SaveDirtyScenesIfNeeded();
                             EditorApplication.isPlaying = true;
                             return new SuccessResponse("Entered play mode.");
                         }
@@ -384,10 +389,33 @@ namespace MCPForUnity.Editor.Tools
             }
         }
 
-        // --- Example Implementations for Settings ---
-        /*
-        private static object SetGameViewResolution(int width, int height) { ... }
-        private static object SetQualityLevel(JToken qualityLevelToken) { ... }
-        */
+        /// <summary>
+        /// Saves all dirty scenes to prevent modal "Save Scene" dialogs.
+        /// Skips untitled scenes (no path) with a warning.
+        /// </summary>
+        private static void SaveDirtyScenesIfNeeded()
+        {
+            int sceneCount = SceneManager.sceneCount;
+            for (int i = 0; i < sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (scene.isDirty)
+                {
+                    if (string.IsNullOrEmpty(scene.path))
+                    {
+                        McpLog.Warn($"[ManageEditor] Skipping unsaved scene '{scene.name}': save it manually before entering play mode.");
+                        continue;
+                    }
+                    try
+                    {
+                        EditorSceneManager.SaveScene(scene);
+                    }
+                    catch (Exception ex)
+                    {
+                        McpLog.Warn($"[ManageEditor] Failed to save dirty scene '{scene.name}': {ex.Message}");
+                    }
+                }
+            }
+        }
     }
 }
